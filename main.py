@@ -8,6 +8,7 @@
 5. seen.json을 갱신한다 (오래된 기록은 정리).
 """
 import datetime
+from collections import defaultdict
 from scraper import SITE_MODULES
 from scraper.common import load_json, save_json
 from generate_dashboard import render_dashboard
@@ -36,6 +37,27 @@ def collect_all_jobs(config):
     for job in all_jobs:
         dedup[job["id"]] = job
     return list(dedup.values())
+
+
+def _normalize(text):
+    return "".join((text or "").split()).lower()
+
+
+def enrich_jobs(jobs, major_companies):
+    """각 공고에 '대기업 여부'와 '여러 사이트에 동시 등록됨' 표시를 추가한다."""
+    groups = defaultdict(set)
+    for job in jobs:
+        key = (_normalize(job.get("company", "")), _normalize(job.get("title", ""))[:20])
+        groups[key].add(job["site"])
+
+    for job in jobs:
+        company = job.get("company", "")
+        job["is_major"] = any(mc in company for mc in major_companies)
+
+        key = (_normalize(company), _normalize(job.get("title", ""))[:20])
+        job["multi_site"] = len(groups[key]) >= 2
+
+    return jobs
 
 
 def split_new_and_old(jobs, seen, keep_days):
@@ -68,6 +90,7 @@ def main():
 
     seen = load_json(SEEN_PATH, {})
     jobs = collect_all_jobs(config)
+    jobs = enrich_jobs(jobs, config.get("major_companies", []))
     new_jobs, old_jobs, seen = split_new_and_old(jobs, seen, config.get("keep_days", 60))
 
     print(f"총 {len(jobs)}건 수집, 신규 {len(new_jobs)}건, 기존 {len(old_jobs)}건")
