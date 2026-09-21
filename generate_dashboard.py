@@ -4,11 +4,12 @@ import html
 import os
 
 CARD_TEMPLATE = """
-<div class="card">
+<div class="card {highlight_class}">
   <div class="card-top">
     <span class="badge badge-{site_class}">{site}</span>
     <span class="date">{date}</span>
   </div>
+  {highlight_badges}
   <a class="title" href="{link}" target="_blank" rel="noopener">{title}</a>
   <div class="company">{company}</div>
   <div class="keyword">검색어: {keyword}</div>
@@ -66,6 +67,20 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .company {{ font-size: 13px; color: var(--muted); margin-bottom: 4px; }}
   .keyword {{ font-size: 11px; color: #9ca3af; }}
   .empty {{ color: var(--muted); font-size: 14px; padding: 12px 0; }}
+  .card.highlight {{
+    border: 1.5px solid #f59e0b;
+    background: #fffbeb;
+    box-shadow: 0 1px 3px rgba(245, 158, 11, 0.15);
+  }}
+  .highlight-badges {{ display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }}
+  .tag-major {{
+    font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
+    background: #fee2e2; color: #b91c1c;
+  }}
+  .tag-hot {{
+    font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px;
+    background: #ffedd5; color: #c2410c;
+  }}
 </style>
 </head>
 <body>
@@ -92,11 +107,32 @@ def _site_class(site):
     return html.escape(site)
 
 
+def _badge_html(job):
+    badges = []
+    if job.get("is_major"):
+        badges.append('<span class="tag-major">🏢 대기업</span>')
+    if job.get("multi_site"):
+        badges.append('<span class="tag-hot">🔥 여러 사이트 동시 등록</span>')
+    if not badges:
+        return ""
+    return '<div class="highlight-badges">' + "".join(badges) + "</div>"
+
+
+def _sort_key(job):
+    # 강조 대상(대기업 또는 인기)을 먼저 보여주되, 원래 순서는 최대한 유지
+    return 0 if (job.get("is_major") or job.get("multi_site")) else 1
+
+
 def _render_cards(jobs):
     if not jobs:
         return '<div class="empty">해당하는 공고가 없습니다.</div>'
+
+    ordered = sorted(jobs, key=_sort_key)
+
     return "\n".join(
         CARD_TEMPLATE.format(
+            highlight_class="highlight" if (job.get("is_major") or job.get("multi_site")) else "",
+            highlight_badges=_badge_html(job),
             site=html.escape(job["site"]),
             site_class=_site_class(job["site"]),
             date=html.escape(job.get("date", "")),
@@ -105,7 +141,7 @@ def _render_cards(jobs):
             company=html.escape(job.get("company", "")),
             keyword=html.escape(job.get("keyword", "")),
         )
-        for job in jobs
+        for job in ordered
     )
 
 
